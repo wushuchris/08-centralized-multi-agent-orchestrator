@@ -70,3 +70,20 @@ class VerificationResult(BaseModel):
     checks: list[VerificationCheck] = Field(min_length=1)
     corrections: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
+
+
+class SynthesisPoint(BaseModel):
+    """One evidence-linked point in the synthesized response."""
+
+    statement: str = Field(min_length=1)
+    source_ids: list[str] = Field(min_length=1)
+
+
+class SynthesisResult(BaseModel):
+    """Validated handoff from the Synthesis Agent."""
+
+    response: str = Field(min_length=1)
+    key_points: list[SynthesisPoint] = Field(min_length=1)
+    cautions: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
+    confidence: Literal["high", "medium", "low"]
