@@ -33,6 +33,7 @@ class ResearchResult(BaseModel):
 class AnalysisPoint(BaseModel):
     """One evidence-linked implication derived from the research handoff."""
 
+    point_id: str | None = None
     kind: Literal["opportunity", "risk", "constraint", "uncertainty"]
     statement: str = Field(min_length=1)
     reasoning: str = Field(min_length=1)
@@ -50,9 +51,9 @@ class AnalysisResult(BaseModel):
 
 
 class VerificationCheck(BaseModel):
-    """One audit judgment about an analysis claim."""
+    """One audit judgment about an analysis point."""
 
-    target: str = Field(min_length=1)
+    analysis_point_id: str = Field(min_length=1)
     verdict: Literal[
         "supported",
         "partially_supported",
@@ -73,9 +74,9 @@ class VerificationResult(BaseModel):
 
 
 class SynthesisPoint(BaseModel):
-    """One evidence-linked point in the synthesized response."""
+    """One verified analysis point selected for the final answer."""
 
-    statement: str = Field(min_length=1)
+    analysis_point_id: str = Field(min_length=1)
     source_ids: list[str] = Field(min_length=1)
 
 
