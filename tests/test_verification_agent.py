@@ -100,6 +100,7 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
     assert "copy the analysis point's point_id exactly" in captured_prompt
     assert "Related evidence is not enough" in captured_prompt
     assert "dominance, superiority, alignment" in captured_prompt
+    assert "corrections must be a JSON array of plain strings" in captured_prompt
     assert result.overall_status == "pass_with_cautions"
     assert result.checks[0].analysis_point_id == "analysis-1"
     assert result.checks[0].verdict == "supported"
@@ -107,6 +108,83 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
     assert result.checks[0].source_ids == ["market-brief"]
     assert result.corrections
     assert result.unresolved_questions
+
+
+def test_verification_agent_normalizes_safe_schema_drift() -> None:
+    research_result = ResearchResult(
+        summary="Demand is growing, while service capacity remains unresolved.",
+        findings=[
+            ResearchFinding(
+                claim="Target-market demand increased year over year.",
+                evidence="The supplied market brief reports 18% annual demand growth.",
+                source_ids=["market-brief"],
+                confidence="high",
+            )
+        ],
+    )
+
+    analysis_result = AnalysisResult(
+        assessment="Demand is favorable, but execution remains uncertain.",
+        points=[
+            AnalysisPoint(
+                point_id="analysis-1",
+                kind="opportunity",
+                statement="Demand growth supports considering market entry.",
+                reasoning="The research reports 18% annual demand growth.",
+                source_ids=["market-brief"],
+                confidence="high",
+            ),
+            AnalysisPoint(
+                point_id="analysis-2",
+                kind="uncertainty",
+                statement="Service capacity remains unresolved.",
+                reasoning="The research does not establish future service capacity.",
+                source_ids=["market-brief"],
+                confidence="medium",
+            ),
+        ],
+    )
+
+    def drifting_model(_: str) -> str:
+        return json.dumps(
+            {
+                "overall_status": "pass_with_cautions",
+                "checks": [
+                    {
+                        "analysis_point_id": "analysis-1",
+                        "verdict": "supported",
+                        "reasoning": "The market brief reports 18% annual demand growth.",
+                        "source_ids": ["market-brief"],
+                    },
+                    {
+                        "analysis_point_id": "analysis-2",
+                        "verdict": "partial_supported",
+                        "reasoning": "Capacity is unresolved rather than established as inadequate.",
+                        "source_ids": ["market-brief"],
+                    },
+                ],
+                "corrections": [
+                    {
+                        "analysis_point_id": "analysis-2",
+                        "correction": "Describe service capacity as unresolved rather than insufficient.",
+                    }
+                ],
+                "unresolved_questions": [
+                    "Can the existing service footprint scale?"
+                ],
+            }
+        )
+
+    result = VerificationAgent(model=drifting_model).run(
+        mission="Evaluate market-entry conditions.",
+        research_result=research_result,
+        analysis_result=analysis_result,
+    )
+
+    assert result.checks[1].verdict == "partially_supported"
+    assert result.corrections == [
+        "analysis-2: Describe service capacity as unresolved rather than insufficient."
+    ]
 
 
 def test_verification_agent_rejects_unknown_analysis_point_id() -> None:
