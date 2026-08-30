@@ -48,6 +48,7 @@ class AnalysisResult(BaseModel):
     points: list[AnalysisPoint] = Field(min_length=1)
     assumptions: list[str] = Field(default_factory=list)
     questions_for_verification: list[str] = Field(default_factory=list)
+    omitted_points: list[str] = Field(default_factory=list)
 
 
 class VerificationCheck(BaseModel):
