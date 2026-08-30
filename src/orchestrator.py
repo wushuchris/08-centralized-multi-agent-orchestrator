@@ -2,7 +2,7 @@
 
 from .analysis_agent import AnalysisAgent
 from .research_agent import ResearchAgent
-from .schemas import ResearchSource
+from .schemas import ResearchSource, SynthesisResult, VerificationResult
 from .state import AgentName, OrchestratorState
 from .synthesis_agent import SynthesisAgent
 from .verification_agent import VerificationAgent
@@ -24,6 +24,42 @@ class CentralOrchestrator:
         self.analysis_agent = analysis_agent
         self.verification_agent = verification_agent
         self.synthesis_agent = synthesis_agent
+
+    @staticmethod
+    def _render_verified_answer(
+        synthesis_result: SynthesisResult,
+        verification_result: VerificationResult,
+    ) -> str:
+        """Render the publishable answer from verified structured claims."""
+
+        lines = ["## Evidence-Backed Conclusions"]
+        for point in synthesis_result.key_points:
+            source_label = ", ".join(point.source_ids)
+            lines.append(f"- {point.statement} — sources: {source_label}")
+
+        caution_checks = [
+            check
+            for check in verification_result.checks
+            if check.verdict != "supported"
+        ]
+        if caution_checks or verification_result.corrections:
+            lines.extend(["", "## Cautions"])
+            for check in caution_checks:
+                lines.append(
+                    f"- {check.target} ({check.verdict}): {check.reasoning}"
+                )
+            for correction in verification_result.corrections:
+                lines.append(f"- {correction}")
+
+        if verification_result.unresolved_questions:
+            lines.extend(["", "## Unresolved Questions"])
+            for question in verification_result.unresolved_questions:
+                lines.append(f"- {question}")
+
+        lines.extend(
+            ["", f"**Confidence:** {synthesis_result.confidence}"]
+        )
+        return "\n".join(lines)
 
     def run(
         self,
@@ -125,11 +161,15 @@ class CentralOrchestrator:
                 analysis_result=state.analysis_result,
                 verification_result=state.verification_result,
             )
-            state.final_answer = state.synthesis_result.response
+            state.final_answer = self._render_verified_answer(
+                synthesis_result=state.synthesis_result,
+                verification_result=state.verification_result,
+            )
             state.record_step(
                 agent="synthesis",
                 action="produce final response",
                 status="completed",
+                note="orchestrator published verified structured output",
             )
 
             active_agent = "orchestrator"
