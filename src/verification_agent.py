@@ -1,5 +1,6 @@
 """Bounded specialist agent for auditing research-backed analysis."""
 
+from collections import Counter
 from collections.abc import Callable
 import json
 
@@ -44,14 +45,20 @@ VALIDATED ANALYSIS HANDOFF:
 Rules:
 - Use only the research and analysis handoffs provided above.
 - Do not perform new research or introduce outside facts.
-- Check whether each important analysis claim is actually supported by the research evidence it cites.
+- Audit every analysis point exactly once.
+- Copy each analysis point's statement verbatim into VerificationCheck.target. Do not paraphrase, strengthen, weaken, or rewrite the claim you are auditing.
+- Judge the exact statement, not its general gist.
+- Mark a claim supported only when the cited research explicitly establishes every material assertion in that exact statement. Related evidence is not enough.
+- If a statement adds dominance, superiority, alignment, product fit, inadequacy, causation, certainty, guarantees, comparative gaps, or other stronger relationships not explicitly established by the research, mark it partially_supported or unsupported as appropriate.
+- If the research establishes only uncertainty, do not approve a statement that converts the uncertainty into an established weakness or fact.
 - Classify each checked claim as supported, partially_supported, unsupported, or conflicted.
 - Every verification check must cite one or more source_id values already present in the research findings.
 - Identify overstatement, unsupported inference, contradiction, or missing evidence.
 - Put factual or analytical corrections in corrections.
 - Preserve genuinely unresolved issues in unresolved_questions.
+- Unresolved questions must be neutral and must not embed an unsupported premise. Ask what evidence is missing rather than assuming a gap or deficiency exists.
 - Set overall_status to pass only when the analysis is materially supported without important cautions.
-- Set overall_status to pass_with_cautions when the analysis is usable but contains limitations that synthesis must preserve.
+- Set overall_status to pass_with_cautions when the analysis is usable but contains non-material limitations that synthesis must preserve.
 - Set overall_status to needs_revision when a material claim is unsupported, conflicted, or substantially overstated.
 - Do not decide whether the workflow continues; the central orchestrator owns routing decisions.
 - Return valid JSON only.
@@ -61,9 +68,9 @@ Return exactly this shape:
   "overall_status": "pass_with_cautions",
   "checks": [
     {{
-      "target": "analysis claim being audited",
+      "target": "exact analysis point statement being audited",
       "verdict": "supported",
-      "reasoning": "why the research does or does not support the claim",
+      "reasoning": "why the research does or does not support the exact claim",
       "source_ids": ["source-1"]
     }}
   ],
@@ -113,6 +120,28 @@ Return exactly this shape:
             raise ValueError(
                 "verification model cited unknown source IDs: "
                 + ", ".join(sorted(unknown_ids))
+            )
+
+        analysis_targets = Counter(
+            point.statement
+            for point in analysis_result.points
+        )
+        verification_targets = Counter(
+            check.target
+            for check in result.checks
+        )
+
+        if verification_targets != analysis_targets:
+            missing = list((analysis_targets - verification_targets).elements())
+            unexpected = list((verification_targets - analysis_targets).elements())
+            details = []
+            if missing:
+                details.append("missing targets: " + "; ".join(missing))
+            if unexpected:
+                details.append("unexpected targets: " + "; ".join(unexpected))
+            raise ValueError(
+                "verification checks must audit every analysis statement exactly once"
+                + (": " + " | ".join(details) if details else "")
             )
 
         return result
