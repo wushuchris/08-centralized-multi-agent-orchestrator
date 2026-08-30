@@ -67,6 +67,9 @@ def test_analysis_agent_consumes_validated_research_handoff() -> None:
     assert "do not say the competitors dominate" in captured_prompt
     assert "do not say that demand aligns with this company's offering" in captured_prompt
     assert "Questions must be neutral" in captured_prompt
+    assert "Do not create point IDs" in captured_prompt
+    assert result.points[0].point_id == "analysis-1"
+    assert result.points[1].point_id == "analysis-2"
     assert result.points[0].kind == "opportunity"
     assert result.points[0].source_ids == ["market-brief"]
     assert result.questions_for_verification
