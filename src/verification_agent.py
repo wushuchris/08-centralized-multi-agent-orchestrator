@@ -46,13 +46,13 @@ Rules:
 - Use only the research and analysis handoffs provided above.
 - Do not perform new research or introduce outside facts.
 - Audit every analysis point exactly once.
-- Copy each analysis point's statement verbatim into VerificationCheck.target. Do not paraphrase, strengthen, weaken, or rewrite the claim you are auditing.
-- Judge the exact statement, not its general gist.
-- Mark a claim supported only when the cited research explicitly establishes every material assertion in that exact statement. Related evidence is not enough.
+- For each check, copy the analysis point's point_id exactly into analysis_point_id. The ID is the stable handoff reference; do not invent or change IDs.
+- Judge the exact analysis statement associated with that ID, not merely its general topic.
+- Mark a claim supported only when the cited research explicitly establishes every material assertion in that statement. Related evidence is not enough.
 - If a statement adds dominance, superiority, alignment, product fit, inadequacy, causation, certainty, guarantees, comparative gaps, or other stronger relationships not explicitly established by the research, mark it partially_supported or unsupported as appropriate.
 - If the research establishes only uncertainty, do not approve a statement that converts the uncertainty into an established weakness or fact.
 - Classify each checked claim as supported, partially_supported, unsupported, or conflicted.
-- Every verification check must cite one or more source_id values already present in the research findings.
+- Every verification check must cite one or more source_id values already cited by the analysis point being audited.
 - Identify overstatement, unsupported inference, contradiction, or missing evidence.
 - Put factual or analytical corrections in corrections.
 - Preserve genuinely unresolved issues in unresolved_questions.
@@ -68,9 +68,9 @@ Return exactly this shape:
   "overall_status": "pass_with_cautions",
   "checks": [
     {{
-      "target": "exact analysis point statement being audited",
+      "analysis_point_id": "analysis-1",
       "verdict": "supported",
-      "reasoning": "why the research does or does not support the exact claim",
+      "reasoning": "why the research does or does not support that analysis point",
       "source_ids": ["source-1"]
     }}
   ],
@@ -122,26 +122,41 @@ Return exactly this shape:
                 + ", ".join(sorted(unknown_ids))
             )
 
-        analysis_targets = Counter(
-            point.statement
+        analysis_ids = [
+            point.point_id
             for point in analysis_result.points
-        )
-        verification_targets = Counter(
-            check.target
-            for check in result.checks
-        )
+            if point.point_id is not None
+        ]
+        if len(analysis_ids) != len(analysis_result.points):
+            raise ValueError("analysis handoff contains a point without a stable ID")
 
-        if verification_targets != analysis_targets:
-            missing = list((analysis_targets - verification_targets).elements())
-            unexpected = list((verification_targets - analysis_targets).elements())
+        verification_ids = [
+            check.analysis_point_id
+            for check in result.checks
+        ]
+        if Counter(verification_ids) != Counter(analysis_ids):
+            missing = list((Counter(analysis_ids) - Counter(verification_ids)).elements())
+            unexpected = list((Counter(verification_ids) - Counter(analysis_ids)).elements())
             details = []
             if missing:
-                details.append("missing targets: " + "; ".join(missing))
+                details.append("missing IDs: " + ", ".join(missing))
             if unexpected:
-                details.append("unexpected targets: " + "; ".join(unexpected))
+                details.append("unexpected IDs: " + ", ".join(unexpected))
             raise ValueError(
-                "verification checks must audit every analysis statement exactly once"
+                "verification checks must audit every analysis point ID exactly once"
                 + (": " + " | ".join(details) if details else "")
             )
+
+        analysis_by_id = {
+            point.point_id: point
+            for point in analysis_result.points
+        }
+        for check in result.checks:
+            point = analysis_by_id[check.analysis_point_id]
+            if not set(check.source_ids).issubset(set(point.source_ids)):
+                raise ValueError(
+                    "verification check cited sources outside its analysis point: "
+                    + check.analysis_point_id
+                )
 
         return result
