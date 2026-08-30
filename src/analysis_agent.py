@@ -41,6 +41,7 @@ Rules:
 - Do not invent new facts, evidence, source IDs, entity relationships, or comparative claims.
 - Do not perform new research.
 - Every analysis point must cite one or more source_id values already present in the research findings.
+- If you cannot cite at least one approved source_id for an idea, do not put it in points; place it in questions_for_verification instead.
 - Preserve the epistemic strength of the research. Do not upgrade related evidence into a stronger claim.
 - If the research says competitors compete on speed and service, you may say those are competitive dimensions; do not say the competitors dominate, outperform, or are superior unless the research explicitly establishes that.
 - If the research says customers show interest in automation, you may say demand exists for automation; do not say that demand aligns with this company's offering unless the research explicitly describes that offering and establishes the fit.
@@ -72,6 +73,67 @@ Return exactly this shape:
 }}
 """
 
+    @staticmethod
+    def _quarantine_unlinked_points(
+        payload: object,
+        approved_ids: set[str],
+    ) -> object:
+        """Remove non-evidence-linked points while preserving them for audit."""
+
+        if not isinstance(payload, dict):
+            return payload
+
+        raw_points = payload.get("points")
+        if not isinstance(raw_points, list):
+            return payload
+
+        kept_points = []
+        omitted_points = []
+
+        for raw_point in raw_points:
+            if not isinstance(raw_point, dict):
+                kept_points.append(raw_point)
+                continue
+
+            raw_source_ids = raw_point.get("source_ids")
+            cleaned_ids = []
+            if isinstance(raw_source_ids, list):
+                for source_id in raw_source_ids:
+                    if isinstance(source_id, str):
+                        cleaned = source_id.strip()
+                        if cleaned and cleaned not in cleaned_ids:
+                            cleaned_ids.append(cleaned)
+
+            has_only_approved_ids = bool(cleaned_ids) and all(
+                source_id in approved_ids
+                for source_id in cleaned_ids
+            )
+
+            if has_only_approved_ids:
+                normalized_point = dict(raw_point)
+                normalized_point["source_ids"] = cleaned_ids
+                kept_points.append(normalized_point)
+                continue
+
+            statement = raw_point.get("statement")
+            if isinstance(statement, str) and statement.strip():
+                omitted_points.append(statement.strip())
+            else:
+                omitted_points.append(
+                    "Analysis point omitted because it lacked approved source links."
+                )
+
+        normalized_payload = dict(payload)
+        normalized_payload["points"] = kept_points
+        normalized_payload["omitted_points"] = omitted_points
+
+        if raw_points and not kept_points:
+            raise ValueError(
+                "analysis model returned no evidence-linked points after validation"
+            )
+
+        return normalized_payload
+
     def run(
         self,
         mission: str,
@@ -90,13 +152,18 @@ Return exactly this shape:
         except json.JSONDecodeError as exc:
             raise ValueError("analysis model returned invalid JSON") from exc
 
-        result = AnalysisResult.model_validate(payload)
-
         approved_ids = {
             source_id
             for finding in research_result.findings
             for source_id in finding.source_ids
         }
+        payload = self._quarantine_unlinked_points(
+            payload=payload,
+            approved_ids=approved_ids,
+        )
+
+        result = AnalysisResult.model_validate(payload)
+
         cited_ids = {
             source_id
             for point in result.points
