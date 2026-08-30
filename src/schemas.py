@@ -74,17 +74,16 @@ class VerificationResult(BaseModel):
 
 
 class SynthesisPoint(BaseModel):
-    """One verified analysis point selected for the final answer."""
+    """One supported analysis point selected for the final answer."""
 
     analysis_point_id: str = Field(min_length=1)
-    source_ids: list[str] = Field(min_length=1)
 
 
 class SynthesisResult(BaseModel):
     """Validated handoff from the Synthesis Agent."""
 
     response: str = Field(min_length=1)
-    key_points: list[SynthesisPoint] = Field(min_length=1)
+    key_points: list[SynthesisPoint] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
     confidence: Literal["high", "medium", "low"]
