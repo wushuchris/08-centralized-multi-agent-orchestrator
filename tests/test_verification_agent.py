@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from src.schemas import (
     AnalysisPoint,
     AnalysisResult,
@@ -93,9 +95,80 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
 
     assert "18%" in captured_prompt
     assert "Service capacity could limit successful expansion" in captured_prompt
+    assert "Copy each analysis point's statement verbatim" in captured_prompt
+    assert "Related evidence is not enough" in captured_prompt
+    assert "dominance, superiority, alignment" in captured_prompt
     assert result.overall_status == "pass_with_cautions"
     assert result.checks[0].verdict == "supported"
     assert result.checks[1].verdict == "partially_supported"
     assert result.checks[0].source_ids == ["market-brief"]
     assert result.corrections
     assert result.unresolved_questions
+
+
+def test_verification_agent_rejects_rewritten_analysis_target() -> None:
+    research_result = ResearchResult(
+        summary="Competition exists on implementation speed and service coverage.",
+        findings=[
+            ResearchFinding(
+                claim="Two established competitors serve the target market.",
+                evidence=(
+                    "Both competitors compete on implementation speed and "
+                    "post-sale service coverage."
+                ),
+                source_ids=["competition-brief"],
+                confidence="high",
+            )
+        ],
+    )
+
+    analysis_result = AnalysisResult(
+        assessment="Speed and service coverage are relevant competitive dimensions.",
+        points=[
+            AnalysisPoint(
+                kind="constraint",
+                statement=(
+                    "Implementation speed and service coverage are competitive "
+                    "dimensions in the target market."
+                ),
+                reasoning=(
+                    "The research says both established competitors compete on "
+                    "those dimensions."
+                ),
+                source_ids=["competition-brief"],
+                confidence="high",
+            )
+        ],
+    )
+
+    def rewriting_model(_: str) -> str:
+        return json.dumps(
+            {
+                "overall_status": "pass",
+                "checks": [
+                    {
+                        "target": (
+                            "Established competitors dominate on implementation "
+                            "speed and post-sale service coverage."
+                        ),
+                        "verdict": "supported",
+                        "reasoning": "The source discusses speed and service coverage.",
+                        "source_ids": ["competition-brief"],
+                    }
+                ],
+                "corrections": [],
+                "unresolved_questions": [],
+            }
+        )
+
+    agent = VerificationAgent(model=rewriting_model)
+
+    with pytest.raises(
+        ValueError,
+        match="verification checks must audit every analysis statement exactly once",
+    ):
+        agent.run(
+            mission="Evaluate market-entry conditions.",
+            research_result=research_result,
+            analysis_result=analysis_result,
+        )
