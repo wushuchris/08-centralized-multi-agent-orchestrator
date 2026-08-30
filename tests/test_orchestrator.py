@@ -42,7 +42,10 @@ def research_model(_: str) -> str:
 def analysis_model(_: str) -> str:
     return json.dumps(
         {
-            "assessment": "The opportunity is promising, but operational readiness remains uncertain.",
+            "assessment": (
+                "The opportunity is promising, but operational readiness "
+                "remains uncertain."
+            ),
             "points": [
                 {
                     "kind": "opportunity",
@@ -54,7 +57,10 @@ def analysis_model(_: str) -> str:
                 {
                     "kind": "uncertainty",
                     "statement": "Service capacity remains unresolved.",
-                    "reasoning": "The research handoff identifies service capacity as an open question.",
+                    "reasoning": (
+                        "The research handoff identifies service capacity as an "
+                        "open question."
+                    ),
                     "source_ids": ["market-brief"],
                     "confidence": "medium",
                 },
@@ -68,6 +74,11 @@ def analysis_model(_: str) -> str:
 
 
 def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
+    raw_draft = (
+        "The evidence supports considering market entry, but service capacity "
+        "should be validated before committing."
+    )
+
     def verification_model(_: str) -> str:
         return json.dumps(
             {
@@ -82,7 +93,10 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
                     {
                         "target": "Service capacity remains unresolved.",
                         "verdict": "partially_supported",
-                        "reasoning": "The research identifies capacity as an open question rather than an established constraint.",
+                        "reasoning": (
+                            "The research identifies capacity as an open question "
+                            "rather than an established constraint."
+                        ),
                         "source_ids": ["market-brief"],
                     },
                 ],
@@ -96,10 +110,10 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     def synthesis_model(_: str) -> str:
         return json.dumps(
             {
-                "response": "The evidence supports considering market entry, but service capacity should be validated before committing.",
+                "response": raw_draft,
                 "key_points": [
                     {
-                        "statement": "Target-market demand grew 18% annually.",
+                        "statement": "Demand growth supports considering market entry.",
                         "source_ids": ["market-brief"],
                     }
                 ],
@@ -128,12 +142,26 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     assert state.verification_result is not None
     assert state.verification_result.overall_status == "pass_with_cautions"
     assert state.synthesis_result is not None
-    assert state.final_answer == state.synthesis_result.response
+    assert state.final_answer is not None
+    assert raw_draft not in state.final_answer
+    assert "Demand growth supports considering market entry." in state.final_answer
+    assert "sources: market-brief" in state.final_answer
+    assert "Service capacity remains unresolved." in state.final_answer
+    assert "partially_supported" in state.final_answer
+    assert "Can Acme Robotics support the required service footprint?" in (
+        state.final_answer
+    )
+    assert "Confidence:** medium" in state.final_answer
     assert state.error is None
     assert any(
         step.agent == "orchestrator"
         and step.action == "route after verification"
         and step.status == "completed"
+        for step in state.history
+    )
+    assert any(
+        step.agent == "synthesis"
+        and step.note == "orchestrator published verified structured output"
         for step in state.history
     )
 
@@ -149,7 +177,10 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
                     {
                         "target": "Demand growth guarantees successful market entry.",
                         "verdict": "unsupported",
-                        "reasoning": "The research establishes demand growth but does not establish guaranteed entry success.",
+                        "reasoning": (
+                            "The research establishes demand growth but does not "
+                            "establish guaranteed entry success."
+                        ),
                         "source_ids": ["market-brief"],
                     }
                 ],
