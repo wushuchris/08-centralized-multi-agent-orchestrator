@@ -85,13 +85,13 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
                 "overall_status": "pass_with_cautions",
                 "checks": [
                     {
-                        "target": "Demand growth supports considering market entry.",
+                        "analysis_point_id": "analysis-1",
                         "verdict": "supported",
                         "reasoning": "The research directly reports 18% annual demand growth.",
                         "source_ids": ["market-brief"],
                     },
                     {
-                        "target": "Service capacity remains unresolved.",
+                        "analysis_point_id": "analysis-2",
                         "verdict": "partially_supported",
                         "reasoning": (
                             "The research identifies capacity as an open question "
@@ -113,8 +113,7 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
                 "response": raw_draft,
                 "key_points": [
                     {
-                        "statement": "Demand growth supports considering market entry.",
-                        "source_ids": ["market-brief"],
+                        "analysis_point_id": "analysis-1",
                     }
                 ],
                 "cautions": [
@@ -139,9 +138,13 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     assert state.status == "completed"
     assert state.research_result is not None
     assert state.analysis_result is not None
+    assert state.analysis_result.points[0].point_id == "analysis-1"
+    assert state.analysis_result.points[1].point_id == "analysis-2"
     assert state.verification_result is not None
     assert state.verification_result.overall_status == "pass_with_cautions"
+    assert state.verification_result.checks[0].analysis_point_id == "analysis-1"
     assert state.synthesis_result is not None
+    assert state.synthesis_result.key_points[0].analysis_point_id == "analysis-1"
     assert state.final_answer is not None
     assert raw_draft not in state.final_answer
     assert "Demand growth supports considering market entry." in state.final_answer
@@ -161,7 +164,7 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     )
     assert any(
         step.agent == "synthesis"
-        and step.note == "orchestrator published verified structured output"
+        and step.note == "orchestrator published canonical verified output"
         for step in state.history
     )
 
@@ -203,7 +206,7 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
                 "overall_status": "needs_revision",
                 "checks": [
                     {
-                        "target": "Demand growth guarantees successful market entry.",
+                        "analysis_point_id": "analysis-1",
                         "verdict": "unsupported",
                         "reasoning": (
                             "The research establishes demand growth but does not "
@@ -212,7 +215,7 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
                         "source_ids": ["market-brief"],
                     },
                     {
-                        "target": "Service capacity remains unresolved.",
+                        "analysis_point_id": "analysis-2",
                         "verdict": "partially_supported",
                         "reasoning": (
                             "The research presents service capacity as an open "
@@ -236,12 +239,7 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
         return json.dumps(
             {
                 "response": "This response should never be produced.",
-                "key_points": [
-                    {
-                        "statement": "Unused synthesis output.",
-                        "source_ids": ["market-brief"],
-                    }
-                ],
+                "key_points": [],
                 "cautions": [],
                 "unresolved_questions": [],
                 "confidence": "low",
