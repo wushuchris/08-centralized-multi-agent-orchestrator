@@ -169,6 +169,34 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
 def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None:
     synthesis_called = False
 
+    def revision_analysis_model(_: str) -> str:
+        return json.dumps(
+            {
+                "assessment": "The analysis overstates what the research proves.",
+                "points": [
+                    {
+                        "kind": "opportunity",
+                        "statement": "Demand growth guarantees successful market entry.",
+                        "reasoning": "The research reports 18% annual demand growth.",
+                        "source_ids": ["market-brief"],
+                        "confidence": "high",
+                    },
+                    {
+                        "kind": "uncertainty",
+                        "statement": "Service capacity remains unresolved.",
+                        "reasoning": (
+                            "The research handoff identifies service capacity as an "
+                            "open question."
+                        ),
+                        "source_ids": ["market-brief"],
+                        "confidence": "medium",
+                    },
+                ],
+                "assumptions": [],
+                "questions_for_verification": [],
+            }
+        )
+
     def verification_model(_: str) -> str:
         return json.dumps(
             {
@@ -182,12 +210,23 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
                             "establish guaranteed entry success."
                         ),
                         "source_ids": ["market-brief"],
-                    }
+                    },
+                    {
+                        "target": "Service capacity remains unresolved.",
+                        "verdict": "partially_supported",
+                        "reasoning": (
+                            "The research presents service capacity as an open "
+                            "question rather than a resolved fact."
+                        ),
+                        "source_ids": ["market-brief"],
+                    },
                 ],
                 "corrections": [
                     "Replace the guarantee claim with a bounded statement about demand evidence."
                 ],
-                "unresolved_questions": [],
+                "unresolved_questions": [
+                    "Can Acme Robotics support the required service footprint?"
+                ],
             }
         )
 
@@ -211,7 +250,7 @@ def test_orchestrator_stops_before_synthesis_when_revision_is_required() -> None
 
     orchestrator = CentralOrchestrator(
         research_agent=ResearchAgent(model=research_model),
-        analysis_agent=AnalysisAgent(model=analysis_model),
+        analysis_agent=AnalysisAgent(model=revision_analysis_model),
         verification_agent=VerificationAgent(model=verification_model),
         synthesis_agent=SynthesisAgent(model=synthesis_model),
     )
