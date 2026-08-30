@@ -47,3 +47,26 @@ class AnalysisResult(BaseModel):
     points: list[AnalysisPoint] = Field(min_length=1)
     assumptions: list[str] = Field(default_factory=list)
     questions_for_verification: list[str] = Field(default_factory=list)
+
+
+class VerificationCheck(BaseModel):
+    """One audit judgment about an analysis claim."""
+
+    target: str = Field(min_length=1)
+    verdict: Literal[
+        "supported",
+        "partially_supported",
+        "unsupported",
+        "conflicted",
+    ]
+    reasoning: str = Field(min_length=1)
+    source_ids: list[str] = Field(min_length=1)
+
+
+class VerificationResult(BaseModel):
+    """Validated audit handoff from the Verification Agent."""
+
+    overall_status: Literal["pass", "pass_with_cautions", "needs_revision"]
+    checks: list[VerificationCheck] = Field(min_length=1)
+    corrections: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
