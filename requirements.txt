@@ -1,3 +1,4 @@
+gradio>=5.0,<6.0
 openai>=1.0,<2.0
 pydantic>=2.7,<3
 pytest>=8,<9
