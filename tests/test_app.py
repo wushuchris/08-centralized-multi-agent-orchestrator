@@ -41,6 +41,7 @@ class FakeOrchestrator:
             assessment="The opportunity is promising.",
             points=[
                 AnalysisPoint(
+                    point_id="analysis-1",
                     kind="opportunity",
                     statement="Demand supports further evaluation.",
                     reasoning="The research reports strong annual growth.",
@@ -55,7 +56,7 @@ class FakeOrchestrator:
             overall_status="pass",
             checks=[
                 VerificationCheck(
-                    target="Demand supports further evaluation.",
+                    analysis_point_id="analysis-1",
                     verdict="supported",
                     reasoning="The research directly supports the demand claim.",
                     source_ids=["market-brief"],
@@ -68,8 +69,7 @@ class FakeOrchestrator:
             response="The evidence supports further evaluation.",
             key_points=[
                 SynthesisPoint(
-                    statement="Demand increased 18% annually.",
-                    source_ids=["market-brief"],
+                    analysis_point_id="analysis-1",
                 )
             ],
             cautions=[],
@@ -119,7 +119,10 @@ def test_handle_request_exposes_structured_workflow(monkeypatch) -> None:
     assert status == "completed"
     assert error == ""
     assert research["findings"][0]["source_ids"] == ["market-brief"]
+    assert analysis["points"][0]["point_id"] == "analysis-1"
     assert analysis["points"][0]["kind"] == "opportunity"
+    assert verification["checks"][0]["analysis_point_id"] == "analysis-1"
     assert verification["overall_status"] == "pass"
+    assert synthesis["key_points"][0]["analysis_point_id"] == "analysis-1"
     assert synthesis["confidence"] == "high"
     assert history[-1]["agent"] == "orchestrator"
