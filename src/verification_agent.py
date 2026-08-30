@@ -51,10 +51,11 @@ Rules:
 - Mark a claim supported only when the cited research explicitly establishes every material assertion in that statement. Related evidence is not enough.
 - If a statement adds dominance, superiority, alignment, product fit, inadequacy, causation, certainty, guarantees, comparative gaps, or other stronger relationships not explicitly established by the research, mark it partially_supported or unsupported as appropriate.
 - If the research establishes only uncertainty, do not approve a statement that converts the uncertainty into an established weakness or fact.
-- Classify each checked claim as supported, partially_supported, unsupported, or conflicted.
+- Classify each checked claim as exactly one of: supported, partially_supported, unsupported, conflicted.
 - Every verification check must cite one or more source_id values already cited by the analysis point being audited.
 - Identify overstatement, unsupported inference, contradiction, or missing evidence.
 - Put factual or analytical corrections in corrections.
+- corrections must be a JSON array of plain strings, never objects.
 - Preserve genuinely unresolved issues in unresolved_questions.
 - Unresolved questions must be neutral and must not embed an unsupported premise. Ask what evidence is missing rather than assuming a gap or deficiency exists.
 - Set overall_status to pass only when the analysis is materially supported without important cautions.
@@ -74,10 +75,71 @@ Return exactly this shape:
       "source_ids": ["source-1"]
     }}
   ],
-  "corrections": [],
+  "corrections": ["plain-text correction"],
   "unresolved_questions": []
 }}
 """
+
+    @staticmethod
+    def _normalize_payload(payload: object) -> object:
+        """Repair narrowly defined, lossless model-formatting drift."""
+
+        if not isinstance(payload, dict):
+            return payload
+
+        normalized = dict(payload)
+
+        checks = normalized.get("checks")
+        if isinstance(checks, list):
+            normalized_checks = []
+            for check in checks:
+                if not isinstance(check, dict):
+                    normalized_checks.append(check)
+                    continue
+
+                normalized_check = dict(check)
+                if normalized_check.get("verdict") == "partial_supported":
+                    normalized_check["verdict"] = "partially_supported"
+                normalized_checks.append(normalized_check)
+            normalized["checks"] = normalized_checks
+
+        corrections = normalized.get("corrections")
+        if isinstance(corrections, list):
+            normalized_corrections = []
+            for correction in corrections:
+                if isinstance(correction, str):
+                    normalized_corrections.append(correction)
+                    continue
+
+                if not isinstance(correction, dict):
+                    normalized_corrections.append(correction)
+                    continue
+
+                text = None
+                for key in (
+                    "correction",
+                    "message",
+                    "text",
+                    "statement",
+                    "reasoning",
+                ):
+                    value = correction.get(key)
+                    if isinstance(value, str) and value.strip():
+                        text = value.strip()
+                        break
+
+                if text is None:
+                    normalized_corrections.append(correction)
+                    continue
+
+                point_id = correction.get("analysis_point_id")
+                if isinstance(point_id, str) and point_id.strip():
+                    text = f"{point_id.strip()}: {text}"
+                normalized_corrections.append(text)
+
+            normalized["corrections"] = normalized_corrections
+
+        return normalized
 
     def run(
         self,
@@ -102,6 +164,7 @@ Return exactly this shape:
         except json.JSONDecodeError as exc:
             raise ValueError("verification model returned invalid JSON") from exc
 
+        payload = self._normalize_payload(payload)
         result = VerificationResult.model_validate(payload)
 
         approved_ids = {
