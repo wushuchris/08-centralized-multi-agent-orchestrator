@@ -51,6 +51,7 @@ Rules:
 - Record any assumptions explicitly rather than presenting them as facts.
 - Put claims that deserve independent checking in questions_for_verification.
 - Questions must be neutral and must not embed an unsupported premise. Ask what must be learned, not what must be done to fix a problem that has not been established.
+- Do not create point IDs. Application code assigns stable IDs after validating your response.
 - Do not make the final recommendation; the Synthesis Agent will own the final answer.
 - Return valid JSON only.
 
@@ -108,5 +109,8 @@ Return exactly this shape:
                 "analysis model cited unknown source IDs: "
                 + ", ".join(sorted(unknown_ids))
             )
+
+        for index, point in enumerate(result.points, start=1):
+            point.point_id = f"analysis-{index}"
 
         return result
