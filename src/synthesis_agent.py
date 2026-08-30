@@ -54,8 +54,9 @@ VALIDATED VERIFICATION HANDOFF:
 Rules:
 - Use only the validated handoffs provided above.
 - Do not perform new research or introduce outside facts.
-- Base key points on research evidence that survived analysis and verification.
-- Every key point must cite one or more source_id values already present in the research findings.
+- Base key points only on verification checks whose verdict is supported.
+- Every key point statement must exactly copy the target of a supported verification check; do not paraphrase it.
+- Every key point must use the same source_id values as that supported verification check.
 - Preserve material corrections, cautions, and unresolved questions from verification.
 - Do not present unsupported, conflicted, or partially supported claims as established facts.
 - If verification reports needs_revision, clearly reflect that limitation instead of masking it.
@@ -64,10 +65,10 @@ Rules:
 
 Return exactly this shape:
 {{
-  "response": "clear user-facing answer",
+  "response": "draft user-facing answer for audit",
   "key_points": [
     {{
-      "statement": "evidence-backed conclusion",
+      "statement": "exact target copied from a supported verification check",
       "source_ids": ["source-1"]
     }}
   ],
@@ -121,5 +122,25 @@ Return exactly this shape:
                 "synthesis model cited unknown source IDs: "
                 + ", ".join(sorted(unknown_ids))
             )
+
+        supported_checks = {
+            check.target: check
+            for check in verification_result.checks
+            if check.verdict == "supported"
+        }
+
+        for point in result.key_points:
+            check = supported_checks.get(point.statement)
+            if check is None:
+                raise ValueError(
+                    "synthesis key point was not an exact supported verification claim: "
+                    + point.statement
+                )
+
+            if set(point.source_ids) != set(check.source_ids):
+                raise ValueError(
+                    "synthesis key point source IDs do not match verification: "
+                    + point.statement
+                )
 
         return result
