@@ -4,6 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .schemas import (
+    AnalysisResult,
+    ResearchResult,
+    SynthesisResult,
+    VerificationResult,
+)
+
 
 AgentName = Literal[
     "orchestrator",
@@ -39,10 +46,10 @@ class OrchestratorState(BaseModel):
     mission: str = Field(min_length=1)
     status: WorkflowStatus = "created"
 
-    research_result: str | None = None
-    analysis_result: str | None = None
-    verification_result: str | None = None
-    synthesis_result: str | None = None
+    research_result: ResearchResult | None = None
+    analysis_result: AnalysisResult | None = None
+    verification_result: VerificationResult | None = None
+    synthesis_result: SynthesisResult | None = None
 
     history: list[AgentStep] = Field(default_factory=list)
     final_answer: str | None = None
