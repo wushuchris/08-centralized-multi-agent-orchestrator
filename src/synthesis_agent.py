@@ -1,5 +1,6 @@
 """Bounded specialist agent for producing the final evidence-linked response."""
 
+from collections import Counter
 from collections.abc import Callable
 import json
 
@@ -37,7 +38,7 @@ class SynthesisAgent:
 
         return f"""You are the Synthesis Agent in a centralized multi-agent system.
 
-Your job is narrow: produce the final user-facing response from validated upstream handoffs.
+Your job is narrow: select verified conclusions and draft a user-facing response from validated upstream handoffs.
 
 MISSION:
 {mission}
@@ -54,13 +55,12 @@ VALIDATED VERIFICATION HANDOFF:
 Rules:
 - Use only the validated handoffs provided above.
 - Do not perform new research or introduce outside facts.
-- Base key points only on verification checks whose verdict is supported.
-- Every key point statement must exactly copy the target of a supported verification check; do not paraphrase it.
-- Every key point must use the same source_id values as that supported verification check.
-- Preserve material corrections, cautions, and unresolved questions from verification.
-- Do not present unsupported, conflicted, or partially supported claims as established facts.
+- Select key points only from verification checks whose verdict is supported.
+- For each selected key point, copy only its analysis_point_id. Do not reproduce or rewrite the claim text; application code will publish the canonical verified Analysis statement.
+- Do not select partially_supported, unsupported, or conflicted analysis IDs as established conclusions.
+- Preserve material corrections, cautions, and unresolved questions from verification in your draft response.
 - If verification reports needs_revision, clearly reflect that limitation instead of masking it.
-- Keep the response useful, concise, and directly responsive to the mission.
+- The response field is an audit draft only. Application code, not your prose, owns the publishable final answer.
 - Return valid JSON only.
 
 Return exactly this shape:
@@ -68,8 +68,7 @@ Return exactly this shape:
   "response": "draft user-facing answer for audit",
   "key_points": [
     {{
-      "statement": "exact target copied from a supported verification check",
-      "source_ids": ["source-1"]
+      "analysis_point_id": "analysis-1"
     }}
   ],
   "cautions": [],
@@ -105,42 +104,32 @@ Return exactly this shape:
 
         result = SynthesisResult.model_validate(payload)
 
-        approved_ids = {
-            source_id
-            for finding in research_result.findings
-            for source_id in finding.source_ids
-        }
-        cited_ids = {
-            source_id
-            for point in result.key_points
-            for source_id in point.source_ids
-        }
-        unknown_ids = cited_ids - approved_ids
-
-        if unknown_ids:
-            raise ValueError(
-                "synthesis model cited unknown source IDs: "
-                + ", ".join(sorted(unknown_ids))
-            )
-
-        supported_checks = {
-            check.target: check
+        supported_ids = {
+            check.analysis_point_id
             for check in verification_result.checks
             if check.verdict == "supported"
         }
+        selected_ids = [
+            point.analysis_point_id
+            for point in result.key_points
+        ]
 
-        for point in result.key_points:
-            check = supported_checks.get(point.statement)
-            if check is None:
-                raise ValueError(
-                    "synthesis key point was not an exact supported verification claim: "
-                    + point.statement
-                )
+        unknown_ids = set(selected_ids) - supported_ids
+        if unknown_ids:
+            raise ValueError(
+                "synthesis selected analysis IDs that were not verified as supported: "
+                + ", ".join(sorted(unknown_ids))
+            )
 
-            if set(point.source_ids) != set(check.source_ids):
-                raise ValueError(
-                    "synthesis key point source IDs do not match verification: "
-                    + point.statement
-                )
+        duplicates = [
+            point_id
+            for point_id, count in Counter(selected_ids).items()
+            if count > 1
+        ]
+        if duplicates:
+            raise ValueError(
+                "synthesis selected duplicate analysis IDs: "
+                + ", ".join(sorted(duplicates))
+            )
 
         return result
