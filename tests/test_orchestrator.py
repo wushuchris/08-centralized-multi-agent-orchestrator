@@ -147,11 +147,19 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     assert state.synthesis_result.key_points[0].analysis_point_id == "analysis-1"
     assert state.final_answer is not None
     assert raw_draft not in state.final_answer
-    assert "Demand growth supports considering market entry." in state.final_answer
-    assert "sources: market-brief" in state.final_answer
-    assert "Service capacity remains unresolved." in state.final_answer
+    assert "## Source-Backed Evidence" in state.final_answer
+    assert (
+        "**market-brief — Synthetic Market Brief:** Annual demand in the "
+        "target market increased 18%."
+    ) in state.final_answer
+    assert "Demand growth supports considering market entry." not in state.final_answer
+    assert "## Orchestrator Assessment" in state.final_answer
+    assert "## Analytical Cautions" in state.final_answer
+    assert "Analysis interpretation: Service capacity remains unresolved." in (
+        state.final_answer
+    )
     assert "partially_supported" in state.final_answer
-    assert "Can Acme Robotics support the required service footprint?" in (
+    assert "Can the company support the required service footprint?" in (
         state.final_answer
     )
     assert "Confidence:** medium" in state.final_answer
@@ -164,7 +172,7 @@ def test_orchestrator_completes_when_verification_allows_synthesis() -> None:
     )
     assert any(
         step.agent == "synthesis"
-        and step.note == "orchestrator published canonical verified output"
+        and step.note == "orchestrator published source facts separately from analysis"
         for step in state.history
     )
 
