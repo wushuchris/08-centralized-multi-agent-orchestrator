@@ -40,6 +40,7 @@ def _analysis_result() -> AnalysisResult:
         ),
         points=[
             AnalysisPoint(
+                point_id="analysis-1",
                 kind="opportunity",
                 statement="Demand growth supports considering market entry.",
                 reasoning=(
@@ -50,6 +51,7 @@ def _analysis_result() -> AnalysisResult:
                 confidence="high",
             ),
             AnalysisPoint(
+                point_id="analysis-2",
                 kind="uncertainty",
                 statement="Service capacity could limit successful expansion.",
                 reasoning=(
@@ -74,13 +76,13 @@ def _verification_result() -> VerificationResult:
         overall_status="pass_with_cautions",
         checks=[
             VerificationCheck(
-                target="Demand growth supports considering market entry.",
+                analysis_point_id="analysis-1",
                 verdict="supported",
                 reasoning="The research handoff reports 18% annual demand growth.",
                 source_ids=["market-brief"],
             ),
             VerificationCheck(
-                target="Service capacity could limit successful expansion.",
+                analysis_point_id="analysis-2",
                 verdict="partially_supported",
                 reasoning=(
                     "Service capacity is an unresolved question, not an "
@@ -98,7 +100,7 @@ def _verification_result() -> VerificationResult:
     )
 
 
-def test_synthesis_agent_accepts_exact_supported_verification_claim() -> None:
+def test_synthesis_agent_accepts_supported_analysis_id() -> None:
     captured_prompt = ""
 
     def fake_model(prompt: str) -> str:
@@ -113,10 +115,7 @@ def test_synthesis_agent_accepts_exact_supported_verification_claim() -> None:
                 ),
                 "key_points": [
                     {
-                        "statement": (
-                            "Demand growth supports considering market entry."
-                        ),
-                        "source_ids": ["market-brief"],
+                        "analysis_point_id": "analysis-1",
                     }
                 ],
                 "cautions": [
@@ -138,24 +137,20 @@ def test_synthesis_agent_accepts_exact_supported_verification_claim() -> None:
     )
 
     assert "pass_with_cautions" in captured_prompt
-    assert "exactly copy the target" in captured_prompt
+    assert "copy only its analysis_point_id" in captured_prompt
     assert "Treat service-capacity risk as unresolved" in captured_prompt
-    assert result.key_points[0].statement == (
-        "Demand growth supports considering market entry."
-    )
-    assert result.key_points[0].source_ids == ["market-brief"]
+    assert result.key_points[0].analysis_point_id == "analysis-1"
     assert result.confidence == "medium"
 
 
-def test_synthesis_agent_rejects_unverified_key_point() -> None:
+def test_synthesis_agent_rejects_non_supported_analysis_id() -> None:
     def fake_model(_: str) -> str:
         return json.dumps(
             {
-                "response": "Acme Robotics has a competitive speed gap.",
+                "response": "Service capacity is a proven weakness.",
                 "key_points": [
                     {
-                        "statement": "Acme Robotics has a competitive speed gap.",
-                        "source_ids": ["market-brief"],
+                        "analysis_point_id": "analysis-2",
                     }
                 ],
                 "cautions": [],
@@ -168,7 +163,7 @@ def test_synthesis_agent_rejects_unverified_key_point() -> None:
 
     with pytest.raises(
         ValueError,
-        match="not an exact supported verification claim",
+        match="analysis IDs that were not verified as supported",
     ):
         agent.run(
             mission="Evaluate whether Acme Robotics should enter the target market.",
