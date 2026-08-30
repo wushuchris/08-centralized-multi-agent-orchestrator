@@ -24,13 +24,13 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
                 "overall_status": "pass_with_cautions",
                 "checks": [
                     {
-                        "target": "Demand growth supports considering market entry.",
+                        "analysis_point_id": "analysis-1",
                         "verdict": "supported",
                         "reasoning": "The research handoff reports 18% annual demand growth in the target market.",
                         "source_ids": ["market-brief"],
                     },
                     {
-                        "target": "Service capacity could limit successful expansion.",
+                        "analysis_point_id": "analysis-2",
                         "verdict": "partially_supported",
                         "reasoning": "The research identifies service capacity as an unresolved question, but does not establish that capacity is currently inadequate.",
                         "source_ids": ["market-brief"],
@@ -64,6 +64,7 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
         assessment="The market opportunity is promising, but operational readiness remains uncertain.",
         points=[
             AnalysisPoint(
+                point_id="analysis-1",
                 kind="opportunity",
                 statement="Demand growth supports considering market entry.",
                 reasoning="The research finding reports 18% annual demand growth in the target market.",
@@ -71,6 +72,7 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
                 confidence="high",
             ),
             AnalysisPoint(
+                point_id="analysis-2",
                 kind="uncertainty",
                 statement="Service capacity could limit successful expansion.",
                 reasoning="The research handoff identifies service-footprint capability as an unresolved question.",
@@ -94,11 +96,12 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
     )
 
     assert "18%" in captured_prompt
-    assert "Service capacity could limit successful expansion" in captured_prompt
-    assert "Copy each analysis point's statement verbatim" in captured_prompt
+    assert '"point_id": "analysis-1"' in captured_prompt
+    assert "copy the analysis point's point_id exactly" in captured_prompt
     assert "Related evidence is not enough" in captured_prompt
     assert "dominance, superiority, alignment" in captured_prompt
     assert result.overall_status == "pass_with_cautions"
+    assert result.checks[0].analysis_point_id == "analysis-1"
     assert result.checks[0].verdict == "supported"
     assert result.checks[1].verdict == "partially_supported"
     assert result.checks[0].source_ids == ["market-brief"]
@@ -106,7 +109,7 @@ def test_verification_agent_audits_research_backed_analysis() -> None:
     assert result.unresolved_questions
 
 
-def test_verification_agent_rejects_rewritten_analysis_target() -> None:
+def test_verification_agent_rejects_unknown_analysis_point_id() -> None:
     research_result = ResearchResult(
         summary="Competition exists on implementation speed and service coverage.",
         findings=[
@@ -126,6 +129,7 @@ def test_verification_agent_rejects_rewritten_analysis_target() -> None:
         assessment="Speed and service coverage are relevant competitive dimensions.",
         points=[
             AnalysisPoint(
+                point_id="analysis-1",
                 kind="constraint",
                 statement=(
                     "Implementation speed and service coverage are competitive "
@@ -141,16 +145,13 @@ def test_verification_agent_rejects_rewritten_analysis_target() -> None:
         ],
     )
 
-    def rewriting_model(_: str) -> str:
+    def wrong_id_model(_: str) -> str:
         return json.dumps(
             {
                 "overall_status": "pass",
                 "checks": [
                     {
-                        "target": (
-                            "Established competitors dominate on implementation "
-                            "speed and post-sale service coverage."
-                        ),
+                        "analysis_point_id": "analysis-999",
                         "verdict": "supported",
                         "reasoning": "The source discusses speed and service coverage.",
                         "source_ids": ["competition-brief"],
@@ -161,11 +162,11 @@ def test_verification_agent_rejects_rewritten_analysis_target() -> None:
             }
         )
 
-    agent = VerificationAgent(model=rewriting_model)
+    agent = VerificationAgent(model=wrong_id_model)
 
     with pytest.raises(
         ValueError,
-        match="verification checks must audit every analysis statement exactly once",
+        match="verification checks must audit every analysis point ID exactly once",
     ):
         agent.run(
             mission="Evaluate market-entry conditions.",
