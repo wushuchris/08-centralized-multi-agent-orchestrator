@@ -4,6 +4,7 @@ from .analysis_agent import AnalysisAgent
 from .research_agent import ResearchAgent
 from .schemas import (
     AnalysisResult,
+    ResearchResult,
     ResearchSource,
     SynthesisResult,
     VerificationResult,
@@ -35,30 +36,34 @@ class CentralOrchestrator:
         synthesis_result: SynthesisResult,
         verification_result: VerificationResult,
         analysis_result: AnalysisResult,
+        research_result: ResearchResult,
+        sources: list[ResearchSource],
     ) -> str:
-        """Render publishable text from canonical verified handoffs."""
+        """Render publishable text while keeping source facts separate from inference."""
 
         analysis_by_id = {
             point.point_id: point
             for point in analysis_result.points
             if point.point_id is not None
         }
-        verification_by_id = {
-            check.analysis_point_id: check
-            for check in verification_result.checks
-        }
 
-        lines = ["## Evidence-Backed Conclusions"]
-        if synthesis_result.key_points:
-            for selected in synthesis_result.key_points:
-                point = analysis_by_id[selected.analysis_point_id]
-                check = verification_by_id[selected.analysis_point_id]
-                source_label = ", ".join(check.source_ids)
-                lines.append(
-                    f"- {point.statement} — sources: {source_label}"
-                )
+        lines = ["## Source-Backed Evidence"]
+        for source in sources:
+            lines.append(
+                f"- **{source.source_id} — {source.title}:** {source.content}"
+            )
+
+        lines.extend(["", "## Orchestrator Assessment"])
+        if verification_result.overall_status == "pass":
+            lines.append(
+                "- The specialist workflow found no material verification "
+                "cautions in the analysis."
+            )
         else:
-            lines.append("- No analysis claim was verified as fully supported.")
+            lines.append(
+                "- The specialist workflow found usable analysis with cautions; "
+                "unresolved issues should be addressed before a firm decision."
+            )
 
         caution_checks = [
             check
@@ -66,18 +71,25 @@ class CentralOrchestrator:
             if check.verdict != "supported"
         ]
         if caution_checks or verification_result.corrections:
-            lines.extend(["", "## Cautions"])
+            lines.extend(["", "## Analytical Cautions"])
             for check in caution_checks:
                 point = analysis_by_id[check.analysis_point_id]
                 lines.append(
-                    f"- {point.statement} ({check.verdict}): {check.reasoning}"
+                    f"- Analysis interpretation: {point.statement} "
+                    f"({check.verdict}). {check.reasoning}"
                 )
             for correction in verification_result.corrections:
-                lines.append(f"- {correction}")
+                lines.append(f"- Verification correction: {correction}")
 
-        if verification_result.unresolved_questions:
+        unresolved_questions = list(
+            dict.fromkeys(
+                research_result.open_questions
+                + verification_result.unresolved_questions
+            )
+        )
+        if unresolved_questions:
             lines.extend(["", "## Unresolved Questions"])
-            for question in verification_result.unresolved_questions:
+            for question in unresolved_questions:
                 lines.append(f"- {question}")
 
         lines.extend(
@@ -189,12 +201,14 @@ class CentralOrchestrator:
                 synthesis_result=state.synthesis_result,
                 verification_result=state.verification_result,
                 analysis_result=state.analysis_result,
+                research_result=state.research_result,
+                sources=sources,
             )
             state.record_step(
                 agent="synthesis",
                 action="produce final response",
                 status="completed",
-                note="orchestrator published canonical verified output",
+                note="orchestrator published source facts separately from analysis",
             )
 
             active_agent = "orchestrator"
