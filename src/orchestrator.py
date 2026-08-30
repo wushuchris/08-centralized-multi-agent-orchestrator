@@ -2,7 +2,12 @@
 
 from .analysis_agent import AnalysisAgent
 from .research_agent import ResearchAgent
-from .schemas import ResearchSource, SynthesisResult, VerificationResult
+from .schemas import (
+    AnalysisResult,
+    ResearchSource,
+    SynthesisResult,
+    VerificationResult,
+)
 from .state import AgentName, OrchestratorState
 from .synthesis_agent import SynthesisAgent
 from .verification_agent import VerificationAgent
@@ -29,13 +34,31 @@ class CentralOrchestrator:
     def _render_verified_answer(
         synthesis_result: SynthesisResult,
         verification_result: VerificationResult,
+        analysis_result: AnalysisResult,
     ) -> str:
-        """Render the publishable answer from verified structured claims."""
+        """Render publishable text from canonical verified handoffs."""
+
+        analysis_by_id = {
+            point.point_id: point
+            for point in analysis_result.points
+            if point.point_id is not None
+        }
+        verification_by_id = {
+            check.analysis_point_id: check
+            for check in verification_result.checks
+        }
 
         lines = ["## Evidence-Backed Conclusions"]
-        for point in synthesis_result.key_points:
-            source_label = ", ".join(point.source_ids)
-            lines.append(f"- {point.statement} — sources: {source_label}")
+        if synthesis_result.key_points:
+            for selected in synthesis_result.key_points:
+                point = analysis_by_id[selected.analysis_point_id]
+                check = verification_by_id[selected.analysis_point_id]
+                source_label = ", ".join(check.source_ids)
+                lines.append(
+                    f"- {point.statement} — sources: {source_label}"
+                )
+        else:
+            lines.append("- No analysis claim was verified as fully supported.")
 
         caution_checks = [
             check
@@ -45,8 +68,9 @@ class CentralOrchestrator:
         if caution_checks or verification_result.corrections:
             lines.extend(["", "## Cautions"])
             for check in caution_checks:
+                point = analysis_by_id[check.analysis_point_id]
                 lines.append(
-                    f"- {check.target} ({check.verdict}): {check.reasoning}"
+                    f"- {point.statement} ({check.verdict}): {check.reasoning}"
                 )
             for correction in verification_result.corrections:
                 lines.append(f"- {correction}")
@@ -164,12 +188,13 @@ class CentralOrchestrator:
             state.final_answer = self._render_verified_answer(
                 synthesis_result=state.synthesis_result,
                 verification_result=state.verification_result,
+                analysis_result=state.analysis_result,
             )
             state.record_step(
                 agent="synthesis",
                 action="produce final response",
                 status="completed",
-                note="orchestrator published verified structured output",
+                note="orchestrator published canonical verified output",
             )
 
             active_agent = "orchestrator"
