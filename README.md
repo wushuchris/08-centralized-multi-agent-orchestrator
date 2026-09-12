@@ -12,17 +12,23 @@ license: mit
 
 # 08. Centralized Multi-Agent Orchestrator
 
-A supervisor-agent system that coordinates specialized **Research**, **Analysis**, **Verification**, and **Synthesis** agents through one central workflow controller.
+A business-first **supervised AI decision team** that coordinates specialized **Research**, **Analysis**, **Verification**, and **Synthesis** agents through one central workflow controller.
 
 **Live Demo:** https://huggingface.co/spaces/FlyingNunchucks/08-centralized-multi-agent-orchestrator
 
-## Goal
+## Business Question
 
-Build a multi-agent system in which a central orchestrator owns routing, shared state, handoffs, failure handling, and publication while specialist agents remain bounded to their assigned reasoning roles.
+> **When four AI specialists advise on one decision, who keeps the team aligned, stops bad handoffs, and controls what reaches the decision-maker?**
+
+The public demo frames that question through a fictional Acme Robotics market-entry review. Four specialist agents contribute bounded work, while a central supervisor owns routing, shared state, verification gates, failure containment, and the final publication boundary.
 
 The core design principle is:
 
 > **The orchestrator controls the workflow. Specialists control their assigned reasoning. Sources establish facts. Agents interpret. The orchestrator controls what gets published.**
+
+## Goal
+
+Build a multi-agent system in which a central orchestrator owns routing, shared state, handoffs, failure handling, and publication while specialist agents remain bounded to their assigned reasoning roles.
 
 ## Why This Project
 
@@ -33,7 +39,7 @@ Adding more agents does not automatically create a reliable multi-agent system. 
 - How is shared state synchronized?
 - What happens when one agent fails or returns malformed output?
 - How are unsupported interpretations prevented from becoming published facts?
-- How can a reviewer reconstruct what happened after the request completes?
+- How can a reviewer see what the team is doing while it works and reconstruct what happened afterward?
 
 This project implements those controls explicitly in a centralized supervisor architecture.
 
@@ -113,7 +119,7 @@ Comes from the Synthesis handoff.
 
 This design prevents an Analysis phrase such as "competitors dominate" from being promoted into the factual section when the approved source merely says that competitors exist and compete on certain dimensions.
 
-## Demo Scenario
+## Demo Scenario — Acme Robotics Market Entry
 
 The public Gradio demo uses a fictional **Acme Robotics** market-entry case with three editable synthetic briefs:
 
@@ -123,7 +129,48 @@ The public Gradio demo uses a fictional **Acme Robotics** market-entry case with
 
 The scenario is intentionally small and synthetic so a reviewer can compare every displayed source-backed fact with the original approved inputs.
 
-The interface exposes the Final Result plus the individual Research, Analysis, Verification, Synthesis, and Audit History handoffs.
+### What the visitor sees
+
+The redesigned demo is presented as a **supervised AI decision team**, not as a raw JSON form. The visitor sees:
+
+1. **The business decision** — whether Acme Robotics has enough evidence to continue evaluating market entry.
+2. **The Central Supervisor** — the component that owns routing, shared state, failure containment, verification gates, and publication authority.
+3. **The four specialists** — Research, Analysis, Verification, and Synthesis, each with a plain-English job and explicit boundary.
+4. **How the decision moves** — a vertical reading path from approved evidence to bounded publication.
+5. **Live Supervisor Activity** — visible stage-by-stage execution while the real orchestrator runs.
+6. **Business-facing work products** — readable research findings, analysis points, verification judgments, and synthesis outcome.
+7. **Publication Boundary** — a clear summary of what was supported, cautioned, quarantined, or stopped before publication.
+8. **Engineering Audit** — the exact typed handoffs and supervisor history underneath the business story.
+
+The layout uses a centered **1080px** workspace so the multi-agent team remains readable without becoming a full-width engineering dashboard.
+
+## True Supervisor Streaming
+
+The original demo waited for the full workflow to finish and then exposed the final state. The upgraded system adds a reusable `CentralOrchestrator.run_iter()` interface that yields safe `OrchestratorState` snapshots as the actual supervisor progresses.
+
+This is not a second demo-only workflow. The existing `run()` API consumes the same generator and returns the same final state.
+
+As a result, the UI can show real transitions such as:
+
+```text
+Supervisor starts workflow
+        ↓
+Research starts → Research completes
+        ↓
+Analysis starts → Analysis completes
+        ↓
+Verification starts → Verification completes
+        ↓
+Supervisor routes after verification
+        ↓
+Synthesis starts → Synthesis completes
+        ↓
+Supervisor publishes or stops
+```
+
+If Verification returns `needs_revision`, the live activity shows the supervisor stop before Synthesis rather than pretending the team continued.
+
+The custom supervisor activity panel is intentionally the primary running indicator; generic framework progress chrome is suppressed so the visitor watches the agent system rather than the hosting framework.
 
 ## Failure Handling and Resilience
 
@@ -154,7 +201,18 @@ The test suite covers:
 - specialist failure containment;
 - canonical final-answer rendering;
 - runtime assembly and model-adapter behavior;
-- Gradio application output exposure.
+- preservation of the original `handle_request()` application contract;
+- incremental `run_iter()` supervisor-state streaming;
+- business-facing completed-state presentation;
+- centered live-demo presentation and intermediate RUNNING frames.
+
+Final automated result:
+
+```text
+18 passed
+```
+
+The final retrofit CI run passed **18 tests in 2.75s**, then deployed successfully from GitHub to Hugging Face. The live redesigned Space also passed final human presentation review.
 
 Run locally with:
 
@@ -246,6 +304,7 @@ The workflow uses a standard `ubuntu-latest` GitHub-hosted runner and keeps GitH
 ├── requirements.txt
 ├── src/
 │   ├── analysis_agent.py
+│   ├── demo_presentation.py
 │   ├── model_adapter.py
 │   ├── orchestrator.py
 │   ├── research_agent.py
@@ -260,6 +319,7 @@ The workflow uses a standard `ubuntu-latest` GitHub-hosted runner and keeps GitH
     ├── test_model_adapter.py
     ├── test_orchestrator.py
     ├── test_orchestrator_failures.py
+    ├── test_orchestrator_streaming.py
     ├── test_research_agent.py
     ├── test_runtime.py
     ├── test_state.py
@@ -295,9 +355,20 @@ Central Orchestrator
 + validation
 + failure containment
 + publication control
++ observable stage transitions
 ```
 
 Specialists remain replaceable. The orchestration contract stays stable.
+
+## Portfolio Presentation Lesson
+
+A technically strong multi-agent system should not require the visitor to reconstruct the architecture from raw JSON after the run.
+
+The final retrofit established three presentation rules that carry forward into later portfolio agents:
+
+> **Business story first. Engineering evidence second. Make the agent system observable while it works.**
+
+For a centralized multi-agent system, observability is strongest when it comes directly from the supervisor's real state transitions rather than from invented chat or a post-hoc animation. Framework-level loading indicators should not visually dominate the system's own activity state.
 
 ## License
 
