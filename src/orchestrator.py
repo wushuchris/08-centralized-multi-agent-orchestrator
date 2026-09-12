@@ -1,5 +1,7 @@
 """Central supervisor for the multi-agent workflow."""
 
+from collections.abc import Iterator
+
 from .analysis_agent import AnalysisAgent
 from .research_agent import ResearchAgent
 from .schemas import (
@@ -97,12 +99,23 @@ class CentralOrchestrator:
         )
         return "\n".join(lines)
 
-    def run(
+    @staticmethod
+    def _snapshot(state: OrchestratorState) -> OrchestratorState:
+        """Return an isolated deep copy suitable for UI streaming or auditing."""
+
+        return state.model_copy(deep=True)
+
+    def run_iter(
         self,
         mission: str,
         sources: list[ResearchSource],
-    ) -> OrchestratorState:
-        """Run the centralized workflow and return its auditable state."""
+    ) -> Iterator[OrchestratorState]:
+        """Yield auditable state snapshots as each supervised stage changes state.
+
+        The generator does not change the orchestration policy. It exposes the same
+        application-owned routing and handoff boundaries incrementally so a caller
+        can observe real progress without duplicating workflow logic in the UI.
+        """
 
         state = OrchestratorState(mission=mission)
         active_agent: AgentName = "orchestrator"
@@ -111,6 +124,7 @@ class CentralOrchestrator:
             action="start workflow",
             status="started",
         )
+        yield self._snapshot(state)
 
         try:
             active_agent = "research"
@@ -120,6 +134,7 @@ class CentralOrchestrator:
                 action="produce research handoff",
                 status="started",
             )
+            yield self._snapshot(state)
             state.research_result = self.research_agent.run(
                 mission=state.mission,
                 sources=sources,
@@ -129,6 +144,7 @@ class CentralOrchestrator:
                 action="produce research handoff",
                 status="completed",
             )
+            yield self._snapshot(state)
 
             active_agent = "analysis"
             state.status = "analyzing"
@@ -137,6 +153,7 @@ class CentralOrchestrator:
                 action="interpret research handoff",
                 status="started",
             )
+            yield self._snapshot(state)
             state.analysis_result = self.analysis_agent.run(
                 mission=state.mission,
                 research_result=state.research_result,
@@ -146,6 +163,7 @@ class CentralOrchestrator:
                 action="interpret research handoff",
                 status="completed",
             )
+            yield self._snapshot(state)
 
             active_agent = "verification"
             state.status = "verifying"
@@ -154,6 +172,7 @@ class CentralOrchestrator:
                 action="audit analysis against research",
                 status="started",
             )
+            yield self._snapshot(state)
             state.verification_result = self.verification_agent.run(
                 mission=state.mission,
                 research_result=state.research_result,
@@ -165,6 +184,7 @@ class CentralOrchestrator:
                 status="completed",
                 note=f"overall_status={state.verification_result.overall_status}",
             )
+            yield self._snapshot(state)
 
             if state.verification_result.overall_status == "needs_revision":
                 state.status = "failed"
@@ -175,7 +195,8 @@ class CentralOrchestrator:
                     status="failed",
                     note=state.error,
                 )
-                return state
+                yield self._snapshot(state)
+                return
 
             state.record_step(
                 agent="orchestrator",
@@ -183,6 +204,7 @@ class CentralOrchestrator:
                 status="completed",
                 note="continue to synthesis",
             )
+            yield self._snapshot(state)
 
             active_agent = "synthesis"
             state.status = "synthesizing"
@@ -191,6 +213,7 @@ class CentralOrchestrator:
                 action="produce final response",
                 status="started",
             )
+            yield self._snapshot(state)
             state.synthesis_result = self.synthesis_agent.run(
                 mission=state.mission,
                 research_result=state.research_result,
@@ -210,6 +233,7 @@ class CentralOrchestrator:
                 status="completed",
                 note="orchestrator published source facts separately from analysis",
             )
+            yield self._snapshot(state)
 
             active_agent = "orchestrator"
             state.status = "completed"
@@ -218,7 +242,7 @@ class CentralOrchestrator:
                 action="complete workflow",
                 status="completed",
             )
-            return state
+            yield self._snapshot(state)
 
         except Exception as exc:
             state.status = "failed"
@@ -235,4 +259,19 @@ class CentralOrchestrator:
                 status="failed",
                 note=f"failed during {active_agent}",
             )
-            return state
+            yield self._snapshot(state)
+
+    def run(
+        self,
+        mission: str,
+        sources: list[ResearchSource],
+    ) -> OrchestratorState:
+        """Run the centralized workflow and return its final auditable state."""
+
+        final_state: OrchestratorState | None = None
+        for snapshot in self.run_iter(mission=mission, sources=sources):
+            final_state = snapshot
+
+        if final_state is None:  # pragma: no cover - defensive contract guard
+            raise RuntimeError("orchestrator produced no state")
+        return final_state
